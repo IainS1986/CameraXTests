@@ -4,18 +4,17 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Size
 import android.graphics.Matrix
+import android.hardware.camera2.CaptureRequest
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.DisplayMetrics
-import android.util.Log
-import android.util.Rational
+import android.util.*
 import android.view.Surface
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.Toast
+import androidx.camera.camera2.Camera2Config
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -93,17 +92,10 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
     private fun startCameraAnalysis() {
         val metrics = DisplayMetrics().also { viewFinder.display.getRealMetrics(it) }
         var resolution = Size(metrics.widthPixels, metrics.heightPixels)
-        //resolution = Size(640, 480)
+        resolution = Size(1024, 768)
 
         val aspectRatio = Rational(resolution.width, resolution.height)
         val rotation = viewFinder.display.rotation
-
-//        var imageCaptureConfig = ImageCaptureConfig.Builder()
-//            .setFlashMode(FlashMode.ON)
-//            .setTargetRotation(rotation)
-//            .setTargetAspectRatio(aspectRatio)
-//            .setTargetResolution(resolution)
-//            .build()
 
         // Setup image analysis pipeline that computes average pixel luminance
         val analyzerConfig = ImageAnalysisConfig.Builder().apply {
@@ -124,17 +116,26 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
             setTargetRotation(rotation)
             setTargetAspectRatio(aspectRatio)
             setTargetResolution(resolution)
-        }.build()
+        }
+
+        // Create Camera2 extender
+        var camera2Extender = Camera2Config.Extender(previewConfig)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            .setCaptureRequestOption(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
+            .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, 100)
+            .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, 16666666)
+            .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, 20400000)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(60,60))
 
         // Build the viewfinder use case
-        val preview = Preview(previewConfig)
-        preview.enableTorch(true)
+        val preview = Preview(previewConfig.build())
 
         // Build the image analysis use case and instantiate our analyzer
         val analyzer = ImageAnalysis(analyzerConfig)
         analyzer.analyzer = LuminosityAnalyzer()
-
-//        val imageCapture = ImageCapture(imageCaptureConfig)
 
         // Every time the viewfinder is updated, recompute layout
         preview.setOnPreviewOutputUpdateListener {
@@ -151,24 +152,6 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         // Set up image capture button
         findViewById<ImageButton>(R.id.capture_button).setOnClickListener {
             preview.enableTorch(!preview.isTorchOn)
-//            val file = File(externalMediaDirs.first(),
-//                "${System.currentTimeMillis()}.jpg")
-//            imageCapture.takePicture(file,
-//                object : ImageCapture.OnImageSavedListener {
-//                    override fun onError(error: ImageCapture.UseCaseError,
-//                                         message: String, exc: Throwable?) {
-//                        val msg = "Photo capture failed: $message"
-//                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-//                        Log.e("CameraXApp", msg)
-//                        exc?.printStackTrace()
-//                    }
-//
-//                    override fun onImageSaved(file: File) {
-//                        val msg = "Photo capture succeeded: ${file.absolutePath}"
-//                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-//                        Log.d("CameraXApp", msg)
-//                    }
-//                })
         }
 
         // Bind use cases to lifecycle
@@ -176,7 +159,6 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         // try rebuilding the project or updating the appcompat dependency to
         // version 1.1.0 or higher.
         CameraX.bindToLifecycle(this, preview, analyzer )
-        preview.enableTorch(true)
     }
 
     private fun updateTransform() {
